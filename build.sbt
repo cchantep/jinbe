@@ -327,6 +327,7 @@ lazy val jinbe = project
           )
         }
       },
+      doc / excludeFilter := "play", // For sbt-hl (not to process docs/play/*)
       ScalaUnidoc / unidoc / unidocAllSources ~= {
         _.map(_.filterNot { f =>
           val name = f.getName

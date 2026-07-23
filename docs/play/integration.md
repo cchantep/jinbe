@@ -62,8 +62,9 @@ class MyComponent1(
   def httpFilters: Seq[play.api.mvc.EssentialFilter] = ???
   def router: play.api.routing.Router = ???
 }
+```
 
-val storage: ObjectStorage = MyComponent1(...).jinbe
+Then it can be used as `val storage: ObjectStorage = MyComponent1(...).jinbe`.
 
 For more complex scenarios with multiple Play traits, use `JinbeComponentsWithInjector`:
 
