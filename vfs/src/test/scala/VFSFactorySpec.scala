@@ -1,0 +1,68 @@
+package tests.jinbe.vfs
+
+import java.net.URI
+
+import io.github.cchantep.jinbe.spi.{ Registry, StorageScheme }
+import io.github.cchantep.jinbe.vfs.{ VFSFactory, VFSStorage }
+import tests.jinbe.DummyInjector
+
+final class VFSFactorySpec extends org.specs2.mutable.Specification {
+  "VFS factory".title
+
+  "VFS storage" should {
+    val loader = java.util.ServiceLoader.load(classOf[StorageScheme])
+    lazy val scheme: StorageScheme = {
+      def go(it: java.util.Iterator[StorageScheme]): StorageScheme = {
+        if (!it.hasNext) {
+          null
+        } else {
+          val s = it.next()
+
+          if (s.scheme == "vfs") {
+            s
+          } else {
+            go(it)
+          }
+        }
+      }
+
+      go(loader.iterator)
+    }
+
+    lazy val service =
+      scheme.factoryClass.getDeclaredConstructor().newInstance()
+
+    {
+      val uri = new URI("vfs:tmp:///")
+
+      s"be resolved from ${uri.toString}" in {
+        service must beAnInstanceOf[VFSFactory] and {
+          service(DummyInjector, uri) must beAnInstanceOf[VFSStorage]
+        }
+      }
+    }
+
+    {
+      val uri = new URI("foo:vfs")
+
+      s"not be resolved from ${uri.toString}" in {
+        service(DummyInjector, uri) must throwA[Exception](
+          "Expected URI with scheme.*"
+        )
+      }
+    }
+  }
+
+  "Registry" should {
+    val reg = Registry.getInstance
+    val scheme = "vfs"
+
+    "find the registered schemes" in {
+      reg.schemes must contain(atLeast(scheme))
+    }
+
+    s"resolve the factory for $scheme" in {
+      reg.factoryClass(scheme) must beSome(classOf[VFSFactory])
+    }
+  }
+}

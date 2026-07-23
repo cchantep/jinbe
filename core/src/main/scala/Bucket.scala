@@ -1,0 +1,58 @@
+/*
+ * Copyright (C) 2018-2026 Zengularity SA (FaberNovel Technologies) <https://www.zengularity.com>
+Copyright (C) 2026 Cédric Chantepie <https://github.com/cchantep>
+ */
+
+package io.github.cchantep.jinbe
+
+import java.time.LocalDateTime
+
+/**
+ * Metadata about a storage bucket.
+ *
+ * @param name the name of the bucket
+ * @param creationTime the time of the bucket has been created
+ *
+ * @see [[BucketRef]]
+ */
+final case class Bucket(name: String, creationTime: LocalDateTime)
+
+/**
+ * Metadata about a storage object.
+ *
+ * @param name the name of the object
+ * @param size the binary size of the object
+ * @param lastModifiedAt the time of the last modification for this object
+ *
+ * @see [[ObjectRef]]
+ */
+final case class Object(
+    name: String,
+    size: Bytes,
+    lastModifiedAt: LocalDateTime)
+
+/**
+ * Metadata about a versioned object.
+ *
+ * @param name the name of the object
+ * @param size the binary size of the object or 0 when it's a delete marker
+ * @param versionCreatedAt the time when this version was created
+ * @param versionId the id of the version
+ * @param isLatest indicates whether this version is the current version of the object or not.
+ *
+ * @see [[VersionedObjectRef]]
+ */
+final case class VersionedObject(
+    name: String,
+    size: Bytes,
+    versionCreatedAt: LocalDateTime,
+    versionId: String,
+    isLatest: Boolean)
+
+/**
+ * An explicit range of bytes.
+ *
+ * @param start the inclusive offset for the range start (< end)
+ * @param end the inclusive index of the last byte of the range (> start)
+ */
+final case class ByteRange(start: Long, end: Long)
