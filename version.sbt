@@ -22,7 +22,7 @@ ThisBuild / version := {
           }
 
           case _ =>
-            "1.0.1" // TODO: sys.error("Fails to determine previous stable version")
+            "1.0.2" // TODO: sys.error("Fails to determine previous stable version")
         }
       } else {
         descr.ref.value
