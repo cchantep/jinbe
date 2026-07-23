@@ -1,0 +1,709 @@
+version: 2.1
+
+commands:
+  setup_sbt:
+    description: Get and install SBT
+    parameters:
+      sbt_version:
+        type: string
+        default: "2.0.1"
+    steps:
+      - restore_cache:
+          keys:
+          - &sbt_cache_key sbt-v2-{{ arch }}-<< parameters.sbt_version >>-{{ checksum "project/build.properties" }}
+
+      - run:
+          name: Setup SBT
+          command: |
+                    if [ ! -x ~/sbt/bin/sbt ]; then
+                      cd ~/
+                      curl --silent -L -o sbt.tgz https://github.com/sbt/sbt/releases/download/v<< parameters.sbt_version >>/sbt-<< parameters.sbt_version >>.tgz
+                      tar -xzvf sbt.tgz && rm -f sbt.tgz
+                    fi
+
+      - save_cache:
+          paths:
+            - ~/.sbt
+          key: *sbt_cache_key
+
+  setup_testbench:
+    description: Install and start storage-testbench
+    parameters:
+      port:
+        type: integer
+        default: 9023
+    steps:
+      - run:
+          name: Install testbench and AWS CLI dependencies
+          command: |
+                    sudo apt-get update
+                    sudo apt-get install -y python3-venv awscli
+
+      - run:
+          name: Start storage-testbench
+          background: true
+          command: |
+                    rm -rf /tmp/storage-testbench
+                    git clone --depth 1 --branch v0.62.0 https://github.com/googleapis/storage-testbench.git /tmp/storage-testbench
+                    cd /tmp/storage-testbench
+                    python3 -m venv venv
+                    . venv/bin/activate
+                    python -m ensurepip --upgrade
+                    python -m pip install --quiet --upgrade pip setuptools wheel
+                    python -m pip install --quiet -e .
+                    python3 testbench_run.py localhost << parameters.port >> 10
+
+      - run:
+          name: Wait for storage-testbench
+          command: |
+                    for i in {1..30}; do
+                      if curl -s http://localhost:<< parameters.port >> 2>/dev/null | grep -q "OK"; then
+                        echo "testbench ready"
+                        exit 0
+                      fi
+                      sleep 1
+                    done
+                    echo "testbench not ready"
+                    exit 1
+
+  build_n_test:
+    description: 'Build & Run tests'
+    parameters:
+      variant:
+        type: string
+        default: ""
+      java_version:
+        type: string
+        default: "openjdk26"
+      scala_version:
+        type: string
+        default: "2.13"
+      ws_version:
+        type: string
+        default: ""
+      play_version:
+        type: string
+        default: ""
+      play_json_version:
+        type: string
+        default: ""
+      modules: # space separated
+        type: string
+        default: "core"
+
+    steps:
+      - restore_cache:
+          keys:
+          - &scala_cache_key scala-{{ .Environment.CIRCLE_JOB }}-{{ checksum "version.sbt" }}-{{ checksum "build.sbt" }}-{{ checksum "project/Common.scala" }}
+
+      - restore_cache:
+          keys:
+          - &compile_cache_key compile-{{ arch }}-<< parameters.java_version >>-<< parameters.scala_version >>-{{ .Revision }}
+
+      - run:
+          name: Build and test; << parameters.scala_version >>, << parameters.variant >> (<< parameters.modules >>)
+          command: |
+                    export SCALA_VERSION="<< parameters.scala_version >>"
+
+                    PV="<< parameters.play_version >>"
+                    if [ ! "x$PV" = "x" ]; then
+                      export PLAY_VERSION="$PV"
+                    fi
+                    
+                    JV="<< parameters.play_json_version >>"
+                    if [ ! "x$JV" = "x" ]; then
+                      export PLAY_JSON_VERSION="$JV"
+                    fi
+                    
+                    WV="<< parameters.ws_version >>"
+                    if [ ! "x$WV" = "x" ]; then
+                      export WS_VERSION="$WV"
+                    fi
+
+                    export SBT_TEST_PROJECTS="<< parameters.modules >>"
+
+                    ./.ci_scripts/retry.sh 3 ./.ci_scripts/validate.sh
+
+      - save_cache:
+          paths:
+            - ~/repo/core/target/scala-*
+            - ~/repo/vfs/target/scala-*
+            - ~/repo/play/target/scala-*
+          key: *compile_cache_key
+
+      - save_cache:
+          paths:
+            - ~/.ivy2
+            - ~/.sbt
+            - ~/.coursier/cache
+          key: *scala_cache_key
+
+  collect_test_reports:
+    description: Collect test reports
+    steps:
+      - run:
+          name: Collect test report
+          command: |
+                    mkdir -p test-reports
+                    find . -path '*/test-reports/*' -name '*.xml' \
+                      -not -path './test-reports/*' \
+                      -print -exec cp {} test-reports \;
+          when: always
+
+  test_suite:
+    description: Test suite
+
+    parameters:
+      variant:
+        type: string
+        default: ""
+      java_version:
+        type: string
+        default: "openjdk26"
+      scala_version:
+        type: string
+        default: "2.13"
+      ws_version:
+        type: string
+        default: ""
+      play_version:
+        type: string
+        default: ""
+      play_json_version:
+        type: string
+        default: ""
+      modules: # space separated
+        type: string
+        default: "core"
+
+    steps:
+      - checkout
+      - setup_sbt
+
+      - run:
+          name: 'Clean Ceph tests'
+          command: 'rm -f s3/src/test/scala/S3CephSpec.scala'
+
+      - build_n_test:
+          java_version: << parameters.java_version >>
+          scala_version: << parameters.scala_version >>
+          ws_version: << parameters.ws_version >>
+          play_version: << parameters.play_version >>
+          play_json_version: << parameters.play_json_version >>
+          variant: << parameters.variant >>
+          modules: << parameters.modules >>
+
+      - collect_test_reports
+      - store_test_results:
+          path: test-reports
+
+  check_examples:
+    description: Check examples
+    parameters:
+      module:
+        type: string
+        default: ""
+
+    steps:
+      - checkout
+      - setup_sbt
+
+      - restore_cache:
+          keys:
+          - &examples_scala_cache_key examples-scala-v2-{{ checksum "examples/version.sbt" }}-{{ checksum "examples/build.sbt" }}-{{ checksum "examples/project/plugins.sbt" }}
+
+      - run:
+          name: Build example << parameters.module >>
+          command: cd examples && sbt +Test/compile
+
+      - save_cache:
+          paths:
+            - ~/.ivy2
+            - ~/.sbt
+            - ~/.coursier/cache
+          key: *examples_scala_cache_key
+
+  publish_snapshots:
+    parameters:
+      release_suffix:
+        type: string
+        default: ""
+      play_version:
+        type: string
+        default: ""
+      play_json_version:
+        type: string
+        default: ""
+      ws_version:
+        type: string
+        default: ""
+      scala_versions:
+        type: string
+        default: ""
+    description: Publish artifacts << parameters.release_suffix >> to Snapshots repository
+    steps:
+      - run:
+          name: Publish artifacts << parameters.release_suffix >> to Sonatype Snapshots; Scala << parameters.scala_versions >>, Play << parameters.play_version >>, Play-JSON << parameters.play_json_version >>, WS << parameters.ws_version >>
+          command: |
+                    if [ ! "${CIRCLE_BRANCH}" = "master" ]; then
+                      echo "Skipped on branch ${CIRCLE_BRANCH}"
+                      exit 1
+                    fi
+                    
+                    V=`sbt --server ';project core ;show version' | grep -A 1 core | grep -v core | cut -d ' ' -f 2`
+                    IS_SNAPSHOT=`echo "$V" | grep SNAPSHOT | wc -l`
+                    
+                    if [ $IS_SNAPSHOT -eq 0 ]; then
+                      echo "Skipped for non-snapshot version: $V"
+                      exit 0
+                    fi
+
+                    export PUBLISH_REPO_NAME="Sonatype Nexus Repository Manager"
+                    export PUBLISH_REPO_ID="central.sonatype.com"
+                    export PUBLISH_REPO_URL="https://central.sonatype.com/repository/maven-snapshots/"
+                    
+                    if [ "x$PUBLISH_USER" = "x" -o "x$PUBLISH_PASS" = "x" ]; then
+                      echo "Missing publication credentials"
+                      exit 3
+                    fi
+                    
+                    export RELEASE_SUFFIX="<< parameters.release_suffix >>"
+                    export PLAY_VERSION="<< parameters.play_version >>"
+                    export PLAY_JSON_VERSION="<< parameters.play_json_version >>"
+                    export WS_VERSION="<< parameters.ws_version >>"
+                    
+                    echo "Publishing artifacts for $PLAY_VERSION"
+                    
+                    if [ "x<< parameters.scala_versions >>" = "x" ]; then
+                      sbt --server +publish
+                    else
+                      for V in `echo "<< parameters.scala_versions >>"`; do
+                        sbt --server ++$V publish
+                      done
+                    fi
+
+jobs:
+  # --- Common tests --- #
+
+  common_scala211_jdk26:
+    docker:
+      - image: cimg/openjdk:26.0
+
+    working_directory: ~/repo
+    
+    steps:
+      - test_suite:
+          modules: core vfs play
+          scala_version: "2.11"
+          ws_version: 1.1.6
+          play_version: 2.6.7
+          play_json_version: 2.6.7
+          variant: Play 2.6, WS 1.1
+
+  common_scala212_play27_jdk26:
+    docker:
+      - image: cimg/openjdk:26.0
+
+    working_directory: ~/repo
+
+    steps:
+      - test_suite:
+          modules: core vfs play
+          scala_version: "2.12"
+          ws_version: 1.1.6
+          play_version: 2.6.7
+          play_json_version: 2.6.7
+          variant: Play 2.6, WS 1.1
+
+      - test_suite:
+          modules: core vfs play
+          scala_version: "2.12"
+          ws_version: 2.0.6
+          play_version: 2.7.1
+          play_json_version: 2.9.1
+          variant: Play 2.7, WS 2.0
+
+  common_scala213_play28_jdk26:
+    docker:
+      - image: cimg/openjdk:26.0
+
+    working_directory: ~/repo
+
+    steps:
+      - test_suite:
+          modules: core vfs play
+          scala_version: "2.13"
+          ws_version: 2.0.6
+          play_version: 2.7.1
+          play_json_version: 2.9.1
+          variant: Play 2.7, WS 2.0
+
+      - test_suite:
+          modules: core vfs play
+          scala_version: "2.13"
+          ws_version: 2.1.2
+          play_version: 2.8.0
+          play_json_version: 2.8.1
+          variant: Play 2.8, WS 2.1
+
+  common_scala3_play29_jdk17:
+    docker:
+      - image: cimg/openjdk:17.0
+
+    working_directory: ~/repo
+
+    steps:
+      - test_suite:
+          java_version: openjdk17
+          modules: core vfs play
+          scala_version: 3.4.3
+          ws_version: 2.2.11
+          play_version: 2.9.5
+          play_json_version: 2.10.6
+          variant: Play 2.9, WS 2.2
+
+  # --- Integration: S3/Google --- #
+
+  int_scala211_jdk26:
+    docker:
+      - image: cimg/openjdk:26.0
+      - image: minio/minio:RELEASE.2024-11-07T00-52-20Z
+        environment:
+          MINIO_ROOT_USER: minioadmin
+          MINIO_ROOT_PASSWORD: minioadmin123
+        command: minio server /data --console-address ":9001"
+
+    working_directory: ~/repo
+    
+    environment:
+      TESTBENCH_HOST: localhost
+      TESTBENCH_PORT: 9023
+      JINBE_USE_TESTBENCH: 'true'
+      MINIO_ENDPOINT: http://localhost:9000
+      CEPH_HOST: localhost:9000
+      CEPH_ACCESSKEY: minioadmin
+      CEPH_SECRETKEY: minioadmin123
+      CEPH_PROTOCOL: http
+      AWS_HOST: localhost:9000
+      AWS_ACCESSKEY: minioadmin
+      AWS_SECRETKEY: minioadmin123
+      AWS_PROTOCOL: http
+    
+    steps:
+      - checkout
+
+      - setup_testbench:
+          port: 9023
+
+      - run:
+          name: "Wait for MinIO"
+          command: |
+            for i in {1..30}; do
+              if curl -f http://localhost:9000/minio/health/live 2>/dev/null; then
+                echo "MinIO ready"
+                exit 0
+              fi
+              sleep 1
+            done
+            echo "MinIO not ready"
+            exit 1
+
+      - run:
+          name: "Initialize MinIO buckets"
+          command: |
+            cd s3 && chmod +x init-buckets.sh && ./init-buckets.sh
+
+      - test_suite:
+          modules: s3 google
+          scala_version: "2.11"
+          ws_version: 1.1.6
+          play_version: 2.6.7
+          play_json_version: 2.6.7
+          variant: Play 2.6, WS 1.1
+
+  int_scala212_play27_jdk26:
+    docker:
+      - image: cimg/openjdk:26.0
+      - image: minio/minio:RELEASE.2024-11-07T00-52-20Z
+        environment:
+          MINIO_ROOT_USER: minioadmin
+          MINIO_ROOT_PASSWORD: minioadmin123
+        command: minio server /data --console-address ":9001"
+
+    working_directory: ~/repo
+    
+    environment:
+      TESTBENCH_HOST: localhost
+      TESTBENCH_PORT: 9023
+      JINBE_USE_TESTBENCH: 'true'
+      MINIO_ENDPOINT: http://localhost:9000
+      CEPH_HOST: localhost:9000
+      CEPH_ACCESSKEY: minioadmin
+      CEPH_SECRETKEY: minioadmin123
+      CEPH_PROTOCOL: http
+      AWS_HOST: localhost:9000
+      AWS_ACCESSKEY: minioadmin
+      AWS_SECRETKEY: minioadmin123
+      AWS_PROTOCOL: http
+
+    steps:
+      - checkout
+
+      - setup_testbench:
+          port: 9023
+
+      - run:
+          name: "Wait for MinIO"
+          command: |
+            for i in {1..30}; do
+              if curl -f http://localhost:9000/minio/health/live 2>/dev/null; then
+                echo "MinIO ready"
+                exit 0
+              fi
+              sleep 1
+            done
+            echo "MinIO not ready"
+            exit 1
+
+      - run:
+          name: "Initialize MinIO buckets"
+          command: |
+            cd s3 && chmod +x init-buckets.sh && ./init-buckets.sh
+
+      - test_suite:
+          modules: s3 google
+          scala_version: "2.12"
+          ws_version: 1.1.6
+          play_version: 2.6.7
+          play_json_version: 2.6.7
+          variant: Play 2.6, WS 1.1
+
+      - test_suite:
+          modules: s3 google
+          scala_version: "2.12"
+          ws_version: 2.0.6
+          play_version: 2.7.1
+          play_json_version: 2.9.1
+          variant: Play 2.7, WS 2.0
+
+  int_scala3_play29_jdk17:
+    docker:
+      - image: cimg/openjdk:17.0
+      - image: minio/minio:RELEASE.2024-11-07T00-52-20Z
+        environment:
+          MINIO_ROOT_USER: minioadmin
+          MINIO_ROOT_PASSWORD: minioadmin123
+        command: minio server /data --console-address ":9001"
+
+    working_directory: ~/repo
+    
+    environment:
+      TESTBENCH_HOST: localhost
+      TESTBENCH_PORT: 9023
+      JINBE_USE_TESTBENCH: 'true'
+      MINIO_ENDPOINT: http://localhost:9000
+      CEPH_HOST: localhost:9000
+      CEPH_ACCESSKEY: minioadmin
+      CEPH_SECRETKEY: minioadmin123
+      CEPH_PROTOCOL: http
+      AWS_HOST: localhost:9000
+      AWS_ACCESSKEY: minioadmin
+      AWS_SECRETKEY: minioadmin123
+      AWS_PROTOCOL: http
+
+    steps:
+      - checkout
+
+      - setup_testbench:
+          port: 9023
+
+      - run:
+          name: "Wait for MinIO"
+          command: |
+            for i in {1..30}; do
+              if curl -f http://localhost:9000/minio/health/live 2>/dev/null; then
+                echo "MinIO ready"
+                exit 0
+              fi
+              sleep 1
+            done
+            echo "MinIO not ready"
+            exit 1
+
+      - run:
+          name: "Initialize MinIO buckets"
+          command: |
+            cd s3 && chmod +x init-buckets.sh && ./init-buckets.sh
+
+      - test_suite:
+          java_version: openjdk17
+          modules: s3 google
+          scala_version: 3.4.3
+          ws_version: 2.2.11
+          play_version: 2.9.5
+          play_json_version: 2.10.6
+          variant: Play 2.9, WS 2.2
+
+  gridfs_scala212_play27_jdk26:
+    docker:
+      - image: cimg/openjdk:26.0
+      - image: mongo:8.0.3
+
+    working_directory: ~/repo
+
+    environment:
+      MONGODB_TEST_URI: gridfs:mongodb://localhost:27017/jinbe-test
+
+    steps:
+      - checkout
+
+      - setup_sbt
+
+      - run:
+          name: "Wait for MongoDB"
+          command: |
+            for i in {1..30}; do
+              if curl -s localhost:27017 2>/dev/null | grep -q "MongoDB"; then
+                echo "MongoDB ready"
+                exit 0
+              fi
+              sleep 1
+            done
+            echo "MongoDB ready"
+
+      - restore_cache:
+          keys:
+            - scala-{{ .Environment.CIRCLE_JOB }}-{{ checksum "version.sbt" }}-{{ checksum "build.sbt" }}-{{ checksum "project/Common.scala" }}
+
+      - run:
+          name: Build and Test GridFS (Scala 2.12)
+          command: |
+            export PATH="$HOME/sbt/bin:$PATH"
+            sbt -J-Xmx4g "++ 2.12; gridfs/test"
+
+      - save_cache:
+          paths:
+            - ~/.sbt
+            - ~/.m2
+            - ~/.cache
+          key: scala-{{ .Environment.CIRCLE_JOB }}-{{ checksum "version.sbt" }}-{{ checksum "build.sbt" }}-{{ checksum "project/Common.scala" }}
+  # --- Master jobs --- #
+
+  publish_snapshots:
+    docker:
+      - image: cimg/openjdk:26.0
+
+    working_directory: ~/repo
+
+    steps:
+      - checkout
+      - setup_sbt
+
+      - restore_cache:
+          keys:
+          - *scala_cache_key
+
+      - publish_snapshots:
+          release_suffix: play26
+          play_version: 2.6.7
+          play_json_version: 2.6.7
+          ws_version: 1.1.6
+          scala_versions: 2.11 2.12
+
+      - publish_snapshots:
+          release_suffix: play27
+          play_version: 2.7.1
+          play_json_version: 2.9.1
+          ws_version: 2.0.6
+          scala_versions: "2.12"
+
+      - publish_snapshots:
+          release_suffix: play27
+          play_version: 2.7.1
+          play_json_version: 2.9.1
+          ws_version: 2.0.6
+          scala_versions: "2.13"
+
+      - publish_snapshots:
+          release_suffix: play29
+          ws_version: 2.2.11
+          play_version: 2.9.5
+          play_json_version: 2.10.6
+          scala_versions: "3.4.3"
+      # TODO: play29
+
+      - publish_snapshots:
+          release_suffix: play28
+          ws_version: 2.1.2
+          play_version: 2.8.0
+          play_json_version: 2.8.1
+          scala_versions: "2.13"
+
+      - save_cache:
+          paths:
+            - ~/.ivy2
+            - ~/.sbt
+            - ~/.coursier/cache
+          key: *scala_cache_key
+
+  examples:
+    docker:
+      - image: cimg/openjdk:26.0
+
+    working_directory: ~/repo
+
+    steps:
+      - check_examples:
+          module: play-vfs-compile-di
+
+      - check_examples:
+          module: play-s3-runtime-di
+
+workflows:
+  version: 2
+
+  main_suite:
+    jobs:
+      # Common
+      - common_scala211_jdk26
+      - common_scala212_play27_jdk26
+      - common_scala213_play28_jdk26
+      - common_scala3_play29_jdk17
+
+      # S3/Google
+      - int_scala211_jdk26:
+          requires:
+            - common_scala211_jdk26
+      - int_scala212_play27_jdk26:
+          requires:
+            - common_scala212_play27_jdk26
+            - int_scala211_jdk26
+      - int_scala3_play29_jdk17:
+          requires:
+            - common_scala3_play29_jdk17
+            - int_scala212_play27_jdk26
+
+      # GridFS
+      - gridfs_scala212_play27_jdk26:
+          requires:
+            - common_scala212_play27_jdk26
+
+      # Master
+      - publish_snapshots:
+          filters:
+            branches:
+              only:
+                - master
+          requires:
+            - int_scala211_jdk26
+            - int_scala212_play27_jdk26
+            - int_scala3_play29_jdk17
+            - gridfs_scala212_play27_jdk26
+
+      - examples:
+          filters:
+            branches:
+              only:
+                - master
+          requires:
+            - publish_snapshots

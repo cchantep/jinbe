@@ -1,0 +1,6 @@
+theme: jekyll-theme-minimal
+title: Jinbe
+description: Scala framework for Object Storage
+show_downloads: false
+latest_release: 1.0.0
+logo: assets/img/logo.png

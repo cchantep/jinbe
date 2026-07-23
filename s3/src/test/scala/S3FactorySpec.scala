@@ -1,0 +1,84 @@
+package tests.jinbe.s3
+
+import java.net.URI
+
+import io.github.cchantep.jinbe.s3.{ S3Factory, S3Scheme, WSS3 }
+import io.github.cchantep.jinbe.s3.tests.TestUtils
+import io.github.cchantep.jinbe.spi.{ Injector, Registry, StorageScheme }
+
+final class S3FactorySpec extends org.specs2.mutable.Specification {
+  "S3 factory".title
+
+  "S3 storage" should {
+    val loader = java.util.ServiceLoader.load(classOf[StorageScheme])
+    lazy val scheme: StorageScheme = {
+      def go(it: java.util.Iterator[StorageScheme]): StorageScheme = {
+        if (!it.hasNext) {
+          null
+        } else {
+          val s = it.next()
+
+          if (s.scheme == "s3") {
+            s
+          } else {
+            go(it)
+          }
+        }
+      }
+
+      go(loader.iterator)
+    }
+
+    def factory = scheme.factoryClass.getDeclaredConstructor().newInstance()
+
+    {
+      val uri = TestUtils.virtualHostStyleUrl
+
+      s"be resolved from ${uri take 8}..." in {
+        scheme must beAnInstanceOf[S3Scheme] and {
+          factory(WSInjector, new URI(uri)) must beAnInstanceOf[WSS3]
+        }
+      }
+    }
+
+    {
+      val uri = new URI("foo:s3")
+
+      s"not be resolved from ${uri.toString}" in {
+        factory(WSInjector, uri) must throwA[Exception](
+          "Expected URI with scheme.*"
+        )
+      }
+    }
+  }
+
+  "Registry" should {
+    val reg = Registry.getInstance
+    val scheme = "s3"
+
+    "find the registered schemes" in {
+      reg.schemes must contain(atLeast(scheme))
+    }
+
+    s"resolve the factory for $scheme" in {
+      reg.factoryClass(scheme) must beSome(classOf[S3Factory])
+    }
+  }
+
+  // ---
+
+  import play.api.libs.ws.ahc.StandaloneAhcWSClient
+
+  private implicit def materializer: akka.stream.Materializer =
+    TestUtils.materializer
+
+  object WSInjector extends Injector {
+    private val WS = classOf[StandaloneAhcWSClient]
+
+    @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf"))
+    def instanceOf[T](cls: Class[T]): T = cls match {
+      case WS => StandaloneAhcWSClient().asInstanceOf[T]
+      case _  => ???
+    }
+  }
+}

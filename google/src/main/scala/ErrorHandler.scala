@@ -1,0 +1,227 @@
+/*
+ * Copyright (C) 2018-2026 Zengularity SA (FaberNovel Technologies) <https://www.zengularity.com>
+Copyright (C) 2026 Cédric Chantepie <https://github.com/cchantep>
+ */
+
+package io.github.cchantep.jinbe.google
+
+import scala.concurrent.Future
+
+import play.api.libs.json.{ JsDefined, JsString, JsUndefined, Json }
+import play.api.libs.ws.StandaloneWSResponse
+
+import com.google.api.client.googleapis.json.GoogleJsonResponseException
+
+import io.github.cchantep.jinbe.exception.{
+  JinbeException,
+  JinbeUnknownError,
+  BucketAlreadyExistsException,
+  BucketNotEmptyException,
+  BucketNotFoundException,
+  ObjectNotFoundException,
+  VersionNotFoundException
+}
+
+private[google] object ErrorHandler {
+
+  def ofBucketFromValues(
+      defaultMessage: => String,
+      bucketName: String
+    )(statusCode: Int,
+      message: String
+    ): Throwable =
+    (statusCode -> message) match {
+      case (404, _) => BucketNotFoundException(bucketName)
+
+      case (409, msg) if msg.contains("already") =>
+        BucketAlreadyExistsException(bucketName)
+
+      case (400, msg)
+          if msg.contains("not empty") || msg.contains("non-empty") =>
+        BucketNotEmptyException(bucketName)
+
+      case (409, msg)
+          if msg.contains("not empty") || msg.contains("non-empty") =>
+        BucketNotEmptyException(bucketName)
+
+      case (_, _) =>
+        JinbeUnknownError(
+          s"$defaultMessage - Response: ${statusCode.toString} - $message"
+        )
+    }
+
+  def ofBucketFromValues(
+      defaultMessage: => String,
+      bucket: GoogleBucketRef
+    )(statusCode: Int,
+      message: String
+    ): Throwable =
+    ofBucketFromValues(defaultMessage, bucket.name)(statusCode, message)
+
+  def ofBucketFromResponse[T](
+      defaultMessage: => String,
+      bucketName: String
+    )(response: StandaloneWSResponse
+    ): Future[T] = {
+    val json = Json.parse(response.body)
+
+    json \ "error" \ "message" match {
+      case JsDefined(JsString(msg)) =>
+        Future.failed[T](
+          ofBucketFromValues(defaultMessage, bucketName)(response.status, msg)
+        )
+
+      case e: JsUndefined =>
+        Future.failed[T](
+          new java.io.IOException(
+            s"$defaultMessage: Could not parse error json ${e.error} in ${Json stringify json}"
+          )
+        )
+
+      case JsDefined(j) =>
+        Future.failed[T](
+          new java.io.IOException(
+            s"$defaultMessage: Could not parse error json unexpected message value ${Json stringify j} in ${Json stringify json}"
+          )
+        )
+    }
+  }
+
+  def ofBucketFromResponse[T](
+      defaultMessage: => String,
+      bucket: GoogleBucketRef
+    )(response: StandaloneWSResponse
+    ): Future[T] =
+    ofBucketFromResponse[T](defaultMessage, bucket.name)(response)
+
+  def ofBucket(
+      defaultMessage: => String,
+      bucketName: String
+    ): Throwable => Throwable = {
+    case g: GoogleJsonResponseException => {
+      val msg: String = {
+        if (g.getDetails == null) g.getMessage
+        else g.getDetails.getMessage
+      }
+
+      ofBucketFromValues(defaultMessage, bucketName)(g.getStatusCode, msg)
+    }
+
+    case b: JinbeException => b
+
+    case error =>
+      JinbeUnknownError(s"$defaultMessage - ${error.getMessage}", Some(error))
+  }
+
+  def ofBucket(
+      defaultMessage: => String,
+      bucket: GoogleBucketRef
+    ): Throwable => Throwable =
+    ofBucket(defaultMessage, bucket.name)
+
+  def ofBucketToFuture[T](
+      defaultMessage: => String,
+      bucketName: String
+    ): PartialFunction[Throwable, Future[T]] = {
+    case error => Future.failed[T](ofBucket(defaultMessage, bucketName)(error))
+  }
+
+  def ofBucketToFuture[T](
+      defaultMessage: => String,
+      bucket: GoogleBucketRef
+    ): PartialFunction[Throwable, Future[T]] =
+    ofBucketToFuture[T](defaultMessage, bucket.name)
+
+  def ofObject(
+      defaultMessage: => String,
+      bucketName: String,
+      objName: String
+    ): Throwable => Throwable = {
+    case g: GoogleJsonResponseException =>
+      g.getStatusCode match {
+        case 404 =>
+          ObjectNotFoundException(bucketName, objName)
+
+        case code =>
+          JinbeUnknownError(s"$defaultMessage - Response: ${code.toString} - ${g.getStatusMessage}")
+      }
+
+    case b: JinbeException => b
+
+    case error =>
+      JinbeUnknownError(s"$defaultMessage - ${error.getMessage}", Some(error))
+  }
+
+  def ofObject(
+      defaultMessage: => String,
+      obj: GoogleObjectRef
+    ): Throwable => Throwable =
+    ofObject(defaultMessage, obj.bucket, obj.name)
+
+  def ofObjectToFuture[T](
+      defaultMessage: => String,
+      bucketName: String,
+      objName: String
+    ): PartialFunction[Throwable, Future[T]] = {
+    case error =>
+      Future.failed[T](ofObject(defaultMessage, bucketName, objName)(error))
+  }
+
+  def ofObjectToFuture[T](
+      defaultMessage: => String,
+      obj: GoogleObjectRef
+    ): PartialFunction[Throwable, Future[T]] =
+    ofObjectToFuture[T](defaultMessage, obj.bucket, obj.name)
+
+  def ofVersion(
+      defaultMessage: => String,
+      bucketName: String,
+      objName: String,
+      versionId: String
+    ): Throwable => Throwable = {
+    case g: GoogleJsonResponseException =>
+      (g.getStatusCode -> g.getStatusMessage) match {
+        case (404, _) =>
+          VersionNotFoundException(bucketName, objName, versionId)
+
+        case (code, message) =>
+          JinbeUnknownError(
+            s"$defaultMessage - Response: ${code.toString} - $message"
+          )
+      }
+
+    case b: JinbeException => b
+
+    case error =>
+      JinbeUnknownError(s"$defaultMessage - ${error.getMessage}", Some(error))
+  }
+
+  def ofVersion(
+      defaultMessage: => String,
+      version: GoogleVersionedObjectRef
+    ): Throwable => Throwable =
+    ofVersion(defaultMessage, version.bucket, version.name, version.versionId)
+
+  def ofVersionToFuture[T](
+      defaultMessage: => String,
+      bucketName: String,
+      objName: String,
+      versionId: String
+    ): PartialFunction[Throwable, Future[T]] = {
+    case error =>
+      Future.failed[T](
+        ofVersion(defaultMessage, bucketName, objName, versionId)(error)
+      )
+  }
+
+  def ofVersionToFuture[T](
+      defaultMessage: => String,
+      version: GoogleVersionedObjectRef
+    ): PartialFunction[Throwable, Future[T]] =
+    ofVersionToFuture[T](
+      defaultMessage,
+      version.bucket,
+      version.name,
+      version.versionId
+    )
+}

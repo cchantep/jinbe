@@ -1,0 +1,37 @@
+@()
+
+<html>
+  <head>
+    <title>Jinbe Demo /</title>
+  </head>
+  <body>
+    <div class="container">
+      <div class="page-header">
+        <h1>Jinbe Demo</h1>
+      </div>
+
+      <div class="panel panel-default">
+        <div class="panel-heading">
+          <h2>List buckets</h2>
+        </div>
+
+        <div class="panel-body">
+          <p>
+            <a href="@{io.github.cchantep.jinbe.demo.controllers.routes.JinbeController.listBuckets}">/api/buckets</a> (JSON)
+          </p>
+
+          <pre>
+            curl -X GET http://$HOST/@{io.github.cchantep.jinbe.demo.controllers.routes.JinbeController.listBuckets}/api/buckets
+          </pre>
+        </div>
+      </div>
+
+      <div class="footer">
+        <div class="container">
+          <p class="text-muted">&copy; Zengularity</p>
+          <p class="text-muted">&copy; cchantep</p>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
