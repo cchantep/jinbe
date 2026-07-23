@@ -10,9 +10,9 @@ The project is using [SBT](http://www.scala-sbt.org/), so to build it from sourc
 ./project/build.sh
 ```
 
-[![CircleCI](https://circleci.com/gh/cchantep/jinbe/tree/master.svg?style=svg)](https://circleci.com/gh/cchantep/jinbe/tree/master)
-[![Maven](https://img.shields.io/maven-central/v/io.github.cchantep.jinbe-core_2.13.svg)](http://search.maven.org/#search%7Cga%7C1%7Ca%3A%22jinbe-core_2.13%22)
-[![Javadocs](https://javadoc.io/badge/io.github.cchantep.jinbe-core_2.12.svg)](https://javadoc.io/doc/io.github.cchantep.jinbe-core_2.13)
+[![CircleCI](https://dl.circleci.com/status-badge/img/gh/cchantep/jinbe/tree/main.svg?style=svg)](https://dl.circleci.com/status-badge/redirect/gh/cchantep/jinbe/tree/main)
+[![Maven](https://img.shields.io/maven-central/v/io.github.cchantep/jinbe-core_2.13.svg)](http://search.maven.org/#search%7Cga%7C1%7Ca%3A%22jinbe-core_2.13%22)
+[![Javadocs](https://javadoc.io/badge/io.github.cchantep/jinbe-core_2.12.svg)](https://javadoc.io/doc/io.github.cchantep/jinbe-core_2.13)
 
 > The environment variable `PLAY_VERSION` can be set to build the `play` module appropriately.
 

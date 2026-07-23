@@ -312,7 +312,21 @@ lazy val jinbe = project
       mimaPreviousArtifacts := Set(
         /* organization.value %% name.value % previousRelease */
       ),
-      doc / excludeFilter := "play",
+      ScalaUnidoc / unidoc / scalacOptions ++= {
+        if (scalaBinaryVersion.value.startsWith("2")) {
+          Seq(
+            "-skip-packages",
+            "com.github.ghik.silencer,play.modules"
+          )
+        } else {
+          Seq(
+            "-skip-by-id",
+            "com.github.ghik.silencer",
+            "-skip-by-id",
+            "play.modules.jinbe"
+          )
+        }
+      },
       ScalaUnidoc / unidoc / unidocAllSources ~= {
         _.map(_.filterNot { f =>
           val name = f.getName
