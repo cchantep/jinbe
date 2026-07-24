@@ -11,7 +11,7 @@ The project is using [SBT](http://www.scala-sbt.org/), so to build it from sourc
 ```
 
 [![CircleCI](https://dl.circleci.com/status-badge/img/gh/cchantep/jinbe/tree/main.svg?style=svg)](https://dl.circleci.com/status-badge/redirect/gh/cchantep/jinbe/tree/main)
-[![Maven](https://img.shields.io/maven-central/v/io.github.cchantep/jinbe-core_2.13.svg)](http://search.maven.org/#search%7Cga%7C1%7Ca%3A%22jinbe-core_2.13%22)
+[![Maven](https://img.shields.io/maven-central/v/io.github.cchantep/jinbe-core_2.13.svg)](https://central.sonatype.com/artifact/io.github.cchantep/jinbe-core_2.13/dependents)
 [![Javadocs](https://javadoc.io/badge/io.github.cchantep/jinbe-core_2.12.svg)](https://javadoc.io/doc/io.github.cchantep/jinbe-core_2.13)
 
 > The environment variable `PLAY_VERSION` can be set to build the `play` module appropriately.
@@ -38,8 +38,6 @@ The simplest way to get started is with the [QuickStart guide](https://cchantep.
 - [Examples](./examples) — Runnable example code
 - [API Docs](https://cchantep.github.io/jinbe/api/) — Detailed API documentation
 - [Play Integration](docs/play/integration.md) — Using Jinbe with Play Framework
-
-## Release
 
 ## Publish release
 
