@@ -82,7 +82,7 @@ object Dependencies {
     )
   }
 
-  val slf4jApi = "org.slf4j" % "slf4j-api" % "1.7.36"
+  val slf4jApi = "org.slf4j" % "slf4j-api" % "2.0.18"
 
   private def exclude(mid: ModuleID) =
     mid
