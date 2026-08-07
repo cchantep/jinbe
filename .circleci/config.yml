@@ -544,7 +544,7 @@ jobs:
           play_json_version: 2.10.6
           variant: Play 2.9, WS 2.2
 
-  gridfs_scala212_play27_jdk26:
+  int_gridfs_scala212_play27_jdk26:
     docker:
       - image: cimg/openjdk:26.0
       - image: mongo:8.0.3
@@ -684,7 +684,7 @@ workflows:
             - int_scala212_play27_jdk26
 
       # GridFS
-      - gridfs_scala212_play27_jdk26:
+      - int_gridfs_scala212_play27_jdk26:
           requires:
             - common_scala212_play27_jdk26
 
@@ -698,7 +698,7 @@ workflows:
             - int_scala211_jdk26
             - int_scala212_play27_jdk26
             - int_scala3_play29_jdk17
-            - gridfs_scala212_play27_jdk26
+            - int_gridfs_scala212_play27_jdk26
 
       - examples:
           filters:
