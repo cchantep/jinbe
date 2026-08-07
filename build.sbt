@@ -310,7 +310,7 @@ lazy val jinbe = project
         }
       },
       mimaPreviousArtifacts := Set(
-        /* organization.value %% name.value % previousRelease */
+        /* TODO: organization.value %% name.value % previousRelease */
       ),
       ScalaUnidoc / unidoc / scalacOptions ++= {
         if (scalaBinaryVersion.value.startsWith("2")) {
