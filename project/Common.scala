@@ -73,7 +73,8 @@ object Common extends AutoPlugin {
           "-Wmacros:after",
           "-Wunused",
           "-Wconf:cat=deprecation&msg=.*(fromFuture|ActorMaterializer).*:s",
-          "-Wconf:msg=.*Calls\\ to\\ parameterless.*:s"
+          "-Wconf:msg=.*Calls\\ to\\ parameterless.*:s",
+          "-Wconf:msg=scala/bug#7014:s"
         )
       } else {
         Seq(
