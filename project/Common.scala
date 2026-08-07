@@ -73,7 +73,8 @@ object Common extends AutoPlugin {
           "-Wmacros:after",
           "-Wunused",
           "-Wconf:cat=deprecation&msg=.*(fromFuture|ActorMaterializer).*:s",
-          "-Wconf:msg=.*Calls\\ to\\ parameterless.*:s"
+          "-Wconf:msg=.*Calls\\ to\\ parameterless.*:s",
+          "-Wconf:msg=scala/bug#7014:s"
         )
       } else {
         Seq(
@@ -86,7 +87,8 @@ object Common extends AutoPlugin {
           "-Wconf:msg=.*has\\ been\\ deprecated.*\\ uninitialized.*:s",
           "-Wconf:msg=.*should\\ not\\ .*infix\\ operator.*:s",
           "-Wconf:msg=.*vararg\\ splices.*:s",
-          "-Wconf:msg=.*Calls\\ to\\ parameterless.*:s"
+          "-Wconf:msg=.*Calls\\ to\\ parameterless.*:s",
+          "-Wconf:msg=scala/bug#7014:s"
         )
       }
     },
