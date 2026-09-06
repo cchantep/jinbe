@@ -6,7 +6,7 @@ commands:
     parameters:
       sbt_version:
         type: string
-        default: "2.0.1"
+        default: "2.0.7"
     steps:
       - restore_cache:
           keys:
@@ -677,11 +677,9 @@ workflows:
       - int_scala212_play27_jdk26:
           requires:
             - common_scala212_play27_jdk26
-            - int_scala211_jdk26
       - int_scala3_play29_jdk17:
           requires:
             - common_scala3_play29_jdk17
-            - int_scala212_play27_jdk26
 
       # GridFS
       - int_gridfs_scala212_play27_jdk26:
