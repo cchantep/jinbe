@@ -367,7 +367,7 @@ jobs:
   int_scala211_jdk26:
     docker:
       - image: cimg/openjdk:26.0
-      - image: quay.io/minio/minio:RELEASE.2024-11-07T00-52-20Z
+      - image: quay.io/minio/aistor/minio:RELEASE.2024-11-07T18-50-04Z
         environment:
           MINIO_ROOT_USER: minioadmin
           MINIO_ROOT_PASSWORD: minioadmin123
@@ -424,7 +424,7 @@ jobs:
   int_scala212_play27_jdk26:
     docker:
       - image: cimg/openjdk:26.0
-      - image: quay.io/minio/minio:RELEASE.2024-11-07T00-52-20Z
+      - image: quay.io/minio/aistor/minio:RELEASE.2024-11-07T18-50-04Z
         environment:
           MINIO_ROOT_USER: minioadmin
           MINIO_ROOT_PASSWORD: minioadmin123
@@ -489,7 +489,7 @@ jobs:
   int_scala3_play29_jdk17:
     docker:
       - image: cimg/openjdk:17.0
-      - image: quay.io/minio/minio:RELEASE.2024-11-07T00-52-20Z
+      - image: quay.io/minio/aistor/minio:RELEASE.2024-11-07T18-50-04Z
         environment:
           MINIO_ROOT_USER: minioadmin
           MINIO_ROOT_PASSWORD: minioadmin123
